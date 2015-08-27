@@ -1,0 +1,17 @@
+{
+  "name": "wfs-spellcheck",
+  "version": "1.0.0",
+  "description": "Spell checker for WireFrame Sketcher mock-ups",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Mike Hatfield <oakraven13@gmail.com>",
+  "license": "ISC",
+  "dependencies": {
+    "glob": "^5.0.14",
+    "nodehun": "^2.0.8",
+    "q": "^1.4.1",
+    "xml2js": "^0.4.10"
+  }
+}
