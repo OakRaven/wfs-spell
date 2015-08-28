@@ -1,105 +1,101 @@
 var fs = require('fs');
-var nodehun = require('nodehun');
+var Nodehun = require('nodehun');
 var glob = require('glob');
 var xml2js = require('xml2js');
+var _ = require('underscore');
 var Q = require('q');
 
 var affbuf, dictbuf, dict,		// dictionary vars
 	parser;						// xml vars
+	
 
 var initDictionary = function () {
 	affbuf = fs.readFileSync('share/en_CA.aff');
 	dictbuf = fs.readFileSync('share/en_CA.dic');
-	dict = new nodehun(affbuf, dictbuf);
+	dict = new Nodehun(affbuf, dictbuf);
 }
 
 var initParser = function () {
 	parser = new xml2js.Parser();
 }
 
-var log = console.log;
+var log = function (message) {
+	console.log(message);
+}
 
-var loadFiles = function () {
-	var deferred = Q.defer();
+var loadFiles = function (path, callback) {
+	glob(path + '/**/*.screen', function (err, files) {
+		if (err) throw err;
+		callback(null, files);
+	});
+};
 
-	glob(wfsProjectPath + '/**/*.screen', function (err, screenFiles) {
-		if (err) deferred.reject(err);
-		deferred.resolve(screenFiles);
+var processFiles = function (screenFilenames, callback) {
+	var results = [];
+
+	log('Found ' + screenFilenames.length + ' screens.\n');
+
+	_.each(screenFilenames, function (screen) {
+		var screenResult = { name: screen, allWords: [], incorrectWords: [] };
+
+		results.push(screenResult);
+
+		extractScreenText(screenResult, function (phrases) {
+			_.each(phrases, function (phrase) {
+				screenResult.allWords = _.union(screenResult.allWords, phrase.split(' '));
+			});
+		});
+	});
+};
+
+var extractScreenText = function (screenPath, callback) {
+	callback(['This is a test', 'of the spel checker.']);
+};
+
+var spellCheck = function (screenItems, callback) {
+	var spellingPromises = [];
+
+	_.each(screenItems, function (screen) {
+		_.each(screen.allWords, function (word) {
+			spellingPromises.push(checkWord(screen, word));
+		});
 	});
 
-	return deferred.promise;
-}
-
-var processFiles = function (screens) {
-	var deferred = Q.defer();
-
-	log('Found ' + screens.length + ' screens.\n');
-
-	for (var i = 0; i < screens.length; i++) {
-		log(screens[i]);
-
-		extractScreenText(screens[i])
-			.then(checkSpelling)
-			.then(function () {
-				deferred.resolve();
-			})
-			.catch(function (err) {
-				deferred.reject(err);
-			})
-	}
-
-	return deferred.promise;
-}
-
-var extractScreenText = function (screenPath) {
-	var deferred = Q.defer();
-
-	deferred.resolve(['This is a test', 'of the spel checker.']);
-
-	return deferred.promise;
-};
-
-var checkSpelling = function (phrases) {
-	var deferred = Q.defer();
-	var wordPromises = [];
-
-	for (var i = 0; i < phrases.length; i++) {
-		var words = phrases[i].split(' ');
-		log(words);
-		for (var j = 0; j < words.length; j++) {
-			wordPromises.push(checkWord(words[j]));
-		}
-	}
-
-	Q.all(wordPromises)
+	Q.all(spellingPromises)
 		.then(function () {
-			deferred.resolve();
+			callback(screenItems);
+		})
+		.catch(function(err){
+			console.log("ERROR: ", err);
 		});
-
-	return deferred.promise;
 };
 
-var checkWord = function (word) {
+var checkWord = function (screen, word) {
 	var deferred = Q.defer();
-	
+
 	dict.spellSuggest(word, function (err, correct) {
-		if (err) throw (err);
-		if(correct === false) {
-			log('    ' + word);
+		if (err) deferred.reject(err);
+		if (correct === false) {
+			screen.incorrectWords.push(word);
 		}
-		
+
 		deferred.resolve();
 	});
-	
+
 	return deferred.promise;
 };
 
+var displayResults = function (results) {
+	_.each(results, function (screen) {
+		console.log(screen.name);
+		console.log('Unique Words: ', screen.allWords.length);
+		console.log('Misspelt Words: ', screen.incorrectWords.length);
+	});
+}
 
 if (process.argv.length < 3) {
-
 	log('Invalid WireFrame Sketcher project path.');
 	process.exit(1);
-
 } else {
 	var wfsProjectPath = process.argv[2];
 
@@ -107,14 +103,13 @@ if (process.argv.length < 3) {
 
 	initDictionary();
 	initParser();
-	loadFiles()
-		.then(processFiles)
-		.then(function () {
-			log('Finished');
-		})
-		.catch(function (err) {
-			log('ERROR: ', err);
-		})
-
+	loadFiles(wfsProjectPath, function (err, screenFilenames) {
+		processFiles(screenFilenames, function (screens) {
+			spellCheck(screens, function (results) {
+				// setTimeout(function () { displayResults(results); }, 5000);
+				displayResults(results);
+			});
+		});
+	});
 }
 
